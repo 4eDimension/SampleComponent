@@ -1,0 +1,1 @@
+{"output": "build","targets": [{"path": "./"}],"postBuild": {"remove": ["Data","tools","package.json","package-lock.json","README.md"]}}
