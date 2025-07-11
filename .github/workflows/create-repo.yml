@@ -1,0 +1,242 @@
+name: Create repository
+on:
+  workflow_dispatch:
+    inputs:
+      repo_name:
+        description: "Repository name"
+        required: true
+      description:
+        description: "Description (project objective or customer name)"
+        required: true
+      version:
+        description: "4D version to be used to compile the project"
+        required: true
+        type: choice
+        options: ["main", "20R10", "20R9", "20R8", "20R7", "20R6", "20R5", "20"]
+      buildExecutable:
+        description: "Build an executable"
+        required: true
+        type: boolean
+        default: false
+
+jobs:
+  create-repo:
+    runs-on: [self-hosted, linux]
+    #runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      id-token: write
+
+    outputs:
+      team: ${{ steps.add_team.outputs.team }}
+      
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install GitHub CLI
+        run: sudo apt-get install -y gh
+
+      - name: Auth with TARGET_TOKEN_GITHUB
+        run: echo "${{ secrets.TARGET_TOKEN_GITHUB }}" | gh auth login --with-token
+
+      - name: Verification authentification gh
+        run: gh auth status
+      - name: Create the new repository
+        id: create_repo
+        run: |
+          gh repo create 4eDimension/${{ github.event.inputs.repo_name }} \
+          --private \
+          --description "${{ github.event.inputs.description }}" \
+          --template "4eDimension/template"
+
+      - name: Copy files from template
+        run: |
+          TEMPLATE_REPO="template"
+          NEW_REPO="${{ github.event.inputs.repo_name }}"
+          TOKEN="${{ secrets.TARGET_TOKEN_GITHUB }}"
+
+          echo "Clonage du dépôt cible ($NEW_REPO)..."
+          git clone --depth=1 https://x-access-token:$TOKEN@github.com/4eDimension/$NEW_REPO temp-new
+
+          echo "Clonage du template pour extraction..."
+          git clone --depth=1 https://x-access-token:$TOKEN@github.com/4eDimension/$TEMPLATE_REPO temp-template
+          
+          echo "Copie des fichiers souhaités..."
+          mkdir temp-new/.github
+          cp -r temp-template/workflows temp-new/.github/
+
+          if [ "${{ github.event.inputs.buildExecutable }}" = "true" ]; then
+            rm -rf temp-new/.github/workflows/build-release.yml || true
+            cp temp-template/PLACEHOLDER_README_EXECUTABLE.md temp-new/PLACEHOLDER_README.md || true
+          else
+            rm -rf temp-new/.github/workflows/build-executable.yml || true
+            cp temp-template/PLACEHOLDER_README_COMPILED.md temp-new/PLACEHOLDER_README.md || true
+          fi
+
+          cp temp-template/.gitignore temp-new/ || true
+          rm -f temp-new/README.md temp-new/*.png || true
+
+          echo "Commit des changements dans le dépôt cible..."
+          cd temp-new
+
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+          git checkout -b main
+
+          git add .
+          git commit -m "Mise à jour des fichiers depuis le template"
+
+          git pull --rebase origin main || true
+
+          git push origin main
+
+      - name: Set default branch to main
+        run: |
+          gh api -X PATCH repos/4eDimension/${{ github.event.inputs.repo_name }} -f default_branch='main'
+
+      - name: Add the creator's team in admin
+        id: add_team
+        shell: bash
+        run: |
+          CREATOR_USERNAME="${{ github.actor }}"
+          NEW_REPO="${{ github.event.inputs.repo_name }}"
+          ORG="4eDimension"
+
+          echo "Recherche de la team de $CREATOR_USERNAME..."
+
+          CREATOR_TEAM=""
+          TEAMS=$(gh api orgs/$ORG/teams --jq '.[].slug')
+
+          for TEAM in $TEAMS; do
+            echo "Vérification de la team : $TEAM"
+            if gh api orgs/$ORG/teams/$TEAM/memberships/$CREATOR_USERNAME &>/dev/null; then
+              echo "$CREATOR_USERNAME est membre de la team: $TEAM"
+              if [ "$TEAM" = "ps" ]; then
+                CREATOR_TEAM="ps-admins"
+                echo "Remplacement de 'ps' par 'ps-admins'"
+              else
+                CREATOR_TEAM="$TEAM"
+              fi
+              break
+            fi
+          done
+
+          if [ -z "$CREATOR_TEAM" ]; then
+            echo "Aucune team trouvée pour l'utilisateur $CREATOR_USERNAME"
+            exit 1
+          fi
+
+          echo "Ajout de la team '$CREATOR_TEAM' en admin sur le repo $NEW_REPO"
+          echo "team=$CREATOR_TEAM" >> $GITHUB_OUTPUT
+          gh api -X PUT /orgs/$ORG/teams/$CREATOR_TEAM/repos/$ORG/$NEW_REPO -f permission=admin
+          
+      - name: Copy secrets from template
+        env:
+          NEW_REPO: ${{ github.event.inputs.repo_name }}
+          APPLE_DEVELOPER_ID_CERTIFICATE: ${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE }}
+          APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+          CODESIGN_APPLE_ID: ${{ secrets.CODESIGN_APPLE_ID }}
+          FTP_PRIVATE_LOGIN: ${{ secrets.FTP_PRIVATE_LOGIN }}
+          FTP_PRIVATE_PASSWORD: ${{ secrets.FTP_PRIVATE_PASSWORD }}
+          FTP_PRIVATE_PATH: ${{ secrets.FTP_PRIVATE_PATH }}
+          FTP_PRIVATE_SERVER: ${{ secrets.FTP_PRIVATE_SERVER }}
+          FTP_PRIVATE_SHORT_PATH: ${{ secrets.FTP_PRIVATE_SHORT_PATH }}
+          GIST_SECRET: ${{ secrets.GIST_SECRET }}
+          NOTARYTOOL_APPLE_ID: ${{ secrets.NOTARYTOOL_APPLE_ID }}
+          NOTARYTOOL_PASSWORD: ${{ secrets.NOTARYTOOL_PASSWORD }}
+          NOTARYTOOL_TEAM_ID: ${{ secrets.NOTARYTOOL_TEAM_ID }}
+          TARGET_TOKEN_GITHUB: ${{ secrets.TARGET_TOKEN_GITHUB }}
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+        run: "declare -A SECRETS\nSECRETS[\"APPLE_DEVELOPER_ID_CERTIFICATE\"]=\"$APPLE_DEVELOPER_ID_CERTIFICATE\"\nSECRETS[\"APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD\"]=\"$APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD\"\nSECRETS[\"CODESIGN_APPLE_ID\"]=\"$CODESIGN_APPLE_ID\"\nSECRETS[\"FTP_PRIVATE_LOGIN\"]=\"$FTP_PRIVATE_LOGIN\"\nSECRETS[\"FTP_PRIVATE_PASSWORD\"]=\"$FTP_PRIVATE_PASSWORD\"\nSECRETS[\"FTP_PRIVATE_PATH\"]=\"$FTP_PRIVATE_PATH\"\nSECRETS[\"FTP_PRIVATE_SERVER\"]=\"$FTP_PRIVATE_SERVER\"\nSECRETS[\"FTP_PRIVATE_SHORT_PATH\"]=\"$FTP_PRIVATE_SHORT_PATH\"\nSECRETS[\"GIST_SECRET\"]=\"$GIST_SECRET\"\nSECRETS[\"NOTARYTOOL_APPLE_ID\"]=\"$NOTARYTOOL_APPLE_ID\"\nSECRETS[\"NOTARYTOOL_PASSWORD\"]=\"$NOTARYTOOL_PASSWORD\"\nSECRETS[\"NOTARYTOOL_TEAM_ID\"]=\"$NOTARYTOOL_TEAM_ID\"\nSECRETS[\"TARGET_TOKEN_GITHUB\"]=\"$TARGET_TOKEN_GITHUB\"\nSECRETS[\"PRIVATE_KEY\"]=\"$PRIVATE_KEY\"\n\nfor SECRET_NAME in \"${!SECRETS[@]}\"; do\n  SECRET_VALUE=\"${SECRETS[$SECRET_NAME]}\"\n  \n  echo \"Ajout du secret $SECRET_NAME dans $NEW_REPO\"\n  echo \"SECRET_VALUE: $SECRET_VALUE\"\n\n  if [ -n \"$SECRET_VALUE\" ]; then\n    echo -n \"$SECRET_VALUE\" | gh secret set \"$SECRET_NAME\" --repo \"4eDimension/$NEW_REPO\"\n  else\n    echo \"La valeur du secret $SECRET_NAME est vide, ignoré.\"\n  fi\ndone\n"
+
+      - name: Updated copy-vars version variable
+        env:
+          NEW_REPO: ${{ github.event.inputs.repo_name }}
+          TOKEN: ${{ secrets.TARGET_TOKEN_GITHUB }}
+        run: |
+          pwd
+          cd temp-new
+          VERSION="${{ github.event.inputs.version }}"
+          sed -i "s|__VERSION__|$VERSION|g" .github/workflows/copy-vars.yml
+
+          git add .github/workflows/copy-vars.yml
+          git commit -m "ci: set VERSION4D to $VERSION in copy-vars.yml"
+          git push origin main
+          
+      - name: Run the workflow to copy variables
+        run: |
+          gh workflow run copy-vars.yml --repo 4eDimension/${{ github.event.inputs.repo_name }}
+
+      - name: Remove the creator from collaborators
+        shell: bash
+        run: |
+          CREATOR_USERNAME="${{ github.actor }}"
+          ORG="4eDimension"
+          REPO_NAME="${{ github.event.inputs.repo_name }}"
+
+          echo "Vérification des teams pour $CREATOR_USERNAME..."
+
+          IS_IN_PS=false
+          IS_IN_PS_ADMINS=false
+
+          if gh api orgs/$ORG/teams/ps/memberships/$CREATOR_USERNAME &>/dev/null; then
+            IS_IN_PS=true
+            echo "$CREATOR_USERNAME est dans la team ps"
+          fi
+
+          if gh api orgs/$ORG/teams/ps-admins/memberships/$CREATOR_USERNAME &>/dev/null; then
+            IS_IN_PS_ADMINS=true
+            echo "$CREATOR_USERNAME est dans la team ps-admins"
+          fi
+
+          if [ "$IS_IN_PS" = true ] && [ "$IS_IN_PS_ADMINS" = false ]; then
+            echo "L'utilisateur est dans ps mais pas dans ps-admins : on ne le supprime pas des collaborateurs et on l'ajoute s'il n'y est pas déjà"
+            gh api -X PUT repos/$ORG/$REPO_NAME/collaborators/$CREATOR_USERNAME -f permission=admin || true
+            exit 0
+          fi
+
+          echo "Suppression de $CREATOR_USERNAME des collaborateurs du dépôt $REPO_NAME..."
+          gh api repos/$ORG/$REPO_NAME/collaborators/$CREATOR_USERNAME -X DELETE || true
+
+  update-readme:
+    needs: create-repo
+    runs-on: [self-hosted, linux]
+    steps:
+      - name: Checkout the new repository
+        uses: actions/checkout@v4
+        with:
+          repository: 4eDimension/${{ github.event.inputs.repo_name }}
+          token: ${{ secrets.TARGET_TOKEN_GITHUB }}
+  
+      - name: Rename placeholder and fill README.md
+        run: |
+          mv PLACEHOLDER_README.md README.md
+
+          CLEANED_MAINTAINER_NAME="${{ github.actor }}"
+          CLEANED_MAINTAINER_NAME="${CLEANED_MAINTAINER_NAME//-/}"
+
+          TEAM_NAME="${{ needs.create-repo.outputs.team }}"
+          if [ "$TEAM_NAME" = "ps-admins" ]; then
+            TEAM_NAME="PS"
+          fi
+
+          sed -i \
+            -e "s|{{version}}|0.0.0|g" \
+            -e "s|{{4d_version}}|${{ github.event.inputs.version }}|g" \
+            -e "s|{{maintainer_name}}|$CLEANED_MAINTAINER_NAME|g" \
+            -e "s|{{team_name}}|$TEAM_NAME|g" \
+            -e "s|{{application_name}}|${{ github.event.inputs.repo_name }}|g" \
+            -e "s|{{application_description}}|${{ github.event.inputs.description }}|g" \
+            README.md
+
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add README.md
+          git rm PLACEHOLDER_README.md
+          git rm PLACEHOLDER_README_COMPILED.md
+          git rm PLACEHOLDER_README_EXECUTABLE.md
+          git commit -m "ci: update README with project metadata"
+          git push origin main
