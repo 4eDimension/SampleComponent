@@ -1,20 +1,20 @@
-[![Version](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/CGareau/dd2aa26e5b6c4152e80e7d3d09f2486a/raw/release_{{application_name}}.json)]()
-[![4D version](https://img.shields.io/badge/4D-{{4d_version}}-E23089.svg)]()
-[![Downloads](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/CGareau/dd2aa26e5b6c4152e80e7d3d09f2486a/raw/download_{{application_name}}.json)]()
-![Maintainer](https://img.shields.io/badge/maintainer-{{maintainer_name}}-blue)
-![Team](https://img.shields.io/badge/team-{{team_name}}-informational)
+[![Version](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/CGareau/dd2aa26e5b6c4152e80e7d3d09f2486a/raw/release_SampleComponent.json)]()
+[![4D version](https://img.shields.io/badge/4D-20R10-E23089.svg)]()
+[![Downloads](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/CGareau/dd2aa26e5b6c4152e80e7d3d09f2486a/raw/download_SampleComponent.json)]()
+![Maintainer](https://img.shields.io/badge/maintainer-CGareau-blue)
+![Team](https://img.shields.io/badge/team-PS-informational)
 <br>
-![Build continue](https://github.com/4eDimension/{{application_name}}/actions/workflows/build-continue.yml/badge.svg)
-![Build release](https://github.com/4eDimension/{{application_name}}/actions/workflows/build-release.yml/badge.svg)
+![Build continue](https://github.com/4eDimension/SampleComponent/actions/workflows/build-continue.yml/badge.svg)
+![Build release](https://github.com/4eDimension/SampleComponent/actions/workflows/build-release.yml/badge.svg)
 <br>
 [![support mac](https://img.shields.io/badge/macOS-000000.svg?style=flat-square&logo=apple&labelColor=000000&logoColor=white)]()
 [![support windows](https://img.shields.io/badge/windows-0078D6.svg?style=flat-square&logo=MODX&logoColor=white)]()
 
 ---
 
-# {{application_name}}
+# SampleComponent
 
-**{{application_description}}**
+**Démo dependencies manager pour Sweetwater**
 
 ---
 
