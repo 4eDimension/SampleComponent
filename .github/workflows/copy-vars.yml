@@ -23,7 +23,7 @@ jobs:
         run: |
           gh variable set APPNAME --repo "${{ github.repository }}" --body "$REPO_NAME"
           gh variable set GISTID --repo "${{ github.repository }}" --body "$GIST_ID"
-          gh variable set VERSION4D --repo "${{ github.repository }}" --body "__VERSION__"
+          gh variable set VERSION4D --repo "${{ github.repository }}" --body "20R10"
 
       - name: Update Version Badge
         uses: schneegans/dynamic-badges-action@v1.7.0
