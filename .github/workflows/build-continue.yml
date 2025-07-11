@@ -1,0 +1,389 @@
+name: Build continue
+
+on:
+  workflow_call:
+  pull_request:
+  push:
+    branches:
+    - main
+    paths:
+      - 'Project/**'
+  workflow_dispatch:
+
+env: 
+  project_path: ${{ github.workspace }}/Project/${{ vars.APPNAME }}.4DProject
+
+jobs:
+  Preflight-check:
+    runs-on: [self-hosted, linux]
+    #runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run checks for file, secrets and vars
+        shell: bash
+        env:
+          GIST_SECRET: ${{ secrets.GIST_SECRET }}
+          TARGET_TOKEN_GITHUB: ${{ secrets.TARGET_TOKEN_GITHUB }}
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+          APPLE_DEVELOPER_ID_CERTIFICATE: ${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE }}
+          APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+          CODESIGN_APPLE_ID: ${{ secrets.CODESIGN_APPLE_ID }}
+          NOTARYTOOL_APPLE_ID: ${{ secrets.NOTARYTOOL_APPLE_ID }}
+          NOTARYTOOL_TEAM_ID: ${{ secrets.NOTARYTOOL_TEAM_ID }}
+          NOTARYTOOL_PASSWORD: ${{ secrets.NOTARYTOOL_PASSWORD }}
+          FTP_PRIVATE_LOGIN: ${{ secrets.FTP_PRIVATE_LOGIN }}
+          FTP_PRIVATE_PASSWORD: ${{ secrets.FTP_PRIVATE_PASSWORD }}
+          APPNAME: ${{ vars.APPNAME }}
+          GISTID: ${{ vars.GISTID }}
+          VERSION4D: ${{ vars.VERSION4D }}
+        run: |
+          errorCount=0
+
+          echo "-----------------------------"
+          echo "Vérification des secrets requis"
+          if [ -z "${GIST_SECRET}" ]; then
+            echo "❌ Erreur : Secret GIST_SECRET manquant."
+            errorCount=$((errorCount+1))
+          else
+            echo "Secret GIST_SECRET présent."
+          fi
+          if [ -z "${TARGET_TOKEN_GITHUB}" ]; then
+            echo "❌ Erreur : Secret TARGET_TOKEN_GITHUB manquant."
+            errorCount=$((errorCount+1))
+          else
+            echo "Secret TARGET_TOKEN_GITHUB présent."
+          fi
+          if [ -z "${PRIVATE_KEY}" ]; then
+            echo "❌ Erreur : Secret PRIVATE_KEY manquant."
+            errorCount=$((errorCount+1))
+          else
+            echo "Secret PRIVATE_KEY présent."
+          fi
+          if [ -z "${APPLE_DEVELOPER_ID_CERTIFICATE}" ]; then
+            echo "❌ Erreur : Secret APPLE_DEVELOPER_ID_CERTIFICATE manquant."
+            errorCount=$((errorCount+1))
+          else
+            echo "Secret APPLE_DEVELOPER_ID_CERTIFICATE présent."
+          fi
+          if [ -z "${APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD}" ]; then
+            echo "❌ Erreur : Secret APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD manquant."
+            errorCount=$((errorCount+1))
+          else
+            echo "Secret APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD présent."
+          fi
+          if [ -z "${CODESIGN_APPLE_ID}" ]; then
+            echo "❌ Erreur : Secret CODESIGN_APPLE_ID manquant."
+            errorCount=$((errorCount+1))
+          else
+            echo "Secret CODESIGN_APPLE_ID présent."
+          fi
+          if [ -z "${NOTARYTOOL_APPLE_ID}" ]; then
+            echo "❌ Erreur : Secret NOTARYTOOL_APPLE_ID manquant."
+            errorCount=$((errorCount+1))
+          else
+            echo "Secret NOTARYTOOL_APPLE_ID présent."
+          fi
+          if [ -z "${NOTARYTOOL_TEAM_ID}" ]; then
+            echo "❌ Erreur : Secret NOTARYTOOL_TEAM_ID manquant."
+            errorCount=$((errorCount+1))
+          else
+            echo "Secret NOTARYTOOL_TEAM_ID présent."
+          fi
+          if [ -z "${NOTARYTOOL_PASSWORD}" ]; then
+            echo "❌ Erreur : Secret NOTARYTOOL_PASSWORD manquant."
+            errorCount=$((errorCount+1))
+          else
+            echo "Secret NOTARYTOOL_PASSWORD présent."
+          fi
+          if [ -z "${FTP_PRIVATE_LOGIN}" ]; then
+            echo "❌ Erreur : Secret FTP_PRIVATE_LOGIN manquant."
+            errorCount=$((errorCount+1))
+          else
+            echo "Secret FTP_PRIVATE_LOGIN présent."
+          fi
+          if [ -z "${FTP_PRIVATE_PASSWORD}" ]; then
+            echo "❌ Erreur : Secret FTP_PRIVATE_PASSWORD manquant."
+            errorCount=$((errorCount+1))
+          else
+            echo "Secret FTP_PRIVATE_PASSWORD présent."
+          fi
+
+          echo "-----------------------------"
+          echo "Vérification des variables (vars) requis"
+          if [ -z "${APPNAME}" ]; then
+            echo "❌ Erreur : Variable APPNAME manquante."
+            errorCount=$((errorCount+1))
+          else
+            echo "Variable APPNAME présente."
+          fi
+          if [ -z "${GISTID}" ]; then
+            echo "❌ Erreur : Variable GISTID manquante."
+            errorCount=$((errorCount+1))
+          else
+            echo "Variable GISTID présente."
+          fi
+          if [ -z "${VERSION4D}" ]; then
+            echo "❌ Erreur : Variable VERSION4D manquante."
+            errorCount=$((errorCount+1))
+          else
+            echo "Variable VERSION4D présente."
+          fi
+
+          echo "-----------------------------"
+          if [ ${errorCount} -gt 0 ]; then
+            echo "❌ Total erreurs trouvées: ${errorCount}. Veuillez corriger ces erreurs et relancer le workflow."
+            exit 1
+          else
+            echo "Tous les contrôles sont passés avec succès."
+          fi
+
+  Update-badge:
+    needs: Preflight-check
+    #runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux]
+    steps:
+      - name: Total downloads of release versions
+        id: downloads
+        run: |
+          set -e
+          total_downloads=$(curl -L -H 'Accept: application/vnd.github+json' -H 'Authorization: Bearer ${{ secrets.TARGET_TOKEN_GITHUB }}' -H 'X-GitHub-Api-Version: 2022-11-28' https://api.github.com/repos/4eDimension/${{ vars.APPNAME }}/releases | egrep 'download_count'  | cut '-d:' -f 2 | sed 's/,/+/' | xargs echo  | xargs -I N echo N 0  | bc || echo 0) 
+          if [ -z "${total_downloads}" ]; then total_downloads=0; fi
+          echo "total_downloads=${total_downloads}" >> "$GITHUB_OUTPUT"
+        shell: bash
+
+      - name: Update download badge
+        if: success()
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        with:
+          auth: ${{ secrets.GIST_SECRET }}  
+          gistID: ${{ vars.GISTID }}
+          filename: download_${{ vars.APPNAME }}.json
+          label: Downloads
+          message: ${{ steps.downloads.outputs.total_downloads }}
+          color: green
+          forceUpdate: true
+
+  Build-on-MacOS:
+    needs: Preflight-check
+    #runs-on: macos-latest
+    runs-on: [self-hosted, macOS]
+    steps:
+      - name: Cleaning
+        run: |
+          rm -r ${GITHUB_WORKSPACE}
+          mkdir ${GITHUB_WORKSPACE}
+        shell: bash
+        
+      - name: Copy repository in runner
+        id: checkout_repo
+        uses: actions/checkout@v4
+
+      - name: Verify or create resources folder
+        id: resources
+        run: |
+          mkdir -p "${GITHUB_WORKSPACE}/resources"
+        shell: bash
+
+      - name: Install Git LFS if missing
+        run: |
+          if ! command -v git-lfs &> /dev/null; then
+            echo "Git LFS non trouvé, installation en cours..."
+            brew install git-lfs || true  # Ignorer les erreurs d'installation
+          else
+            echo "Git LFS est déjà installé mais non lié. Tentative de correction..."
+          fi
+
+          # Récupérer le chemin exact de Git LFS
+          GIT_LFS_PATH=$(brew --prefix git-lfs)/bin/git-lfs
+          
+          if [ -f "$GIT_LFS_PATH" ]; then
+            echo "Git LFS trouvé à : $GIT_LFS_PATH"
+            export PATH=$(brew --prefix git-lfs)/bin:$PATH
+          else
+            echo "Erreur : Impossible de trouver git-lfs"
+            exit 1
+          fi
+
+          # Définir le chemin de Git LFS pour les étapes suivantes
+          echo "GIT_LFS_PATH=$(brew --prefix git-lfs)/bin/git-lfs" >> $GITHUB_ENV
+          echo "PATH=$(brew --prefix git-lfs)/bin:$PATH" >> $GITHUB_ENV
+    
+          # Initialiser Git LFS
+          git lfs install
+          git lfs version
+
+      - name: Copy tools in runner
+        id: checkout_tools
+        uses: actions/checkout@v4
+        with:
+          repository: 4eDimension/Tools
+          token: ${{ secrets.TARGET_TOKEN_GITHUB }}
+          ref: ${{ vars.VERSION4D }}
+          path: tools
+          lfs: true
+
+      - name: Verify Git LFS installation
+        run: |
+          git lfs version
+          git lfs pull  # Vérifie que les fichiers sont bien récupérés
+
+      - name: Check make.json or create it
+        id: create_make_json
+        uses: 4eDimension/Tools/.github/actions/build-create-makejson@main
+
+      - name: Set REPO_NAME and PROJECT_NAME environment variables
+        run: |
+          echo "REPO_NAME=$(echo $GITHUB_REPOSITORY | cut -d'/' -f2)" >> "$GITHUB_ENV"
+          PROJECT_PATH=$(find Project -name "*.4DProject" | head -n 1)
+          PROJECT_NAME=$(basename "$PROJECT_PATH" .4DProject)
+          echo "PROJECT_NAME=$PROJECT_NAME" >> "$GITHUB_ENV"
+        shell: bash
+
+      - name: Compilation
+        id: compilation
+        run: |
+          ${GITHUB_WORKSPACE}/tools/tool4d_mac/tool4d.app/Contents/MacOS/tool4d \
+            --dataless \
+            -s "${GITHUB_WORKSPACE}/tools/4DBuilder/Project/builder.4DProject" \
+            --user-param "{\"makeFile\":\"${GITHUB_WORKSPACE}/make.json\",\"verbose\":true,\"config\":\"release\",\"buildNumber\":\"1\",\"output\":\"${GITHUB_WORKSPACE}/Build\"}"
+
+          # Vérification de l'existence du fichier .4DZ
+          TARGET_FILE="${GITHUB_WORKSPACE}/Build/release/${REPO_NAME}.4dbase/${PROJECT_NAME}.4DZ"
+          if [ ! -f "$TARGET_FILE" ]; then
+            echo "❌ Compilation failed: $TARGET_FILE not found"
+            exit 1
+          else
+            echo "✅ Compilation succeeded: $TARGET_FILE exists"
+          fi
+        shell: bash
+
+      - name: Check package.json or create it
+        id: create_package_json
+        uses: 4eDimension/Tools/.github/actions/build-create-packagejson@main
+        with:
+          name: ${{ vars.APPNAME }}
+          version: "0.0.0"
+          
+      - name: Create manifest & info.plist
+        id: manifest
+        run: |
+          git pull origin main
+          package_name=$(cat package.json | jq -r ".name")
+          target_tag=$(cat package.json | jq -r ".version")
+          creation_date=$(date +'%Y-%m-%d')
+          version4d="${{ vars.VERSION4D }}"
+          if [[ "$version4d" == "main" ]]; then
+            # Cas spécial : version main
+            tag_value="main"
+          elif [[ "$version4d" =~ ^[0-9]+$ ]]; then
+            # Cas LTS : 20 => 20.0.0
+            tag_value="${version4d}.0.0"
+          elif [[ "$version4d" =~ ^([0-9]+)R([0-9]+)$ ]]; then
+            # Cas R : 20R7 => 20.7.0
+            major="${BASH_REMATCH[1]}"
+            minor="${BASH_REMATCH[2]}"
+            tag_value="${major}.${minor}.0"
+          else
+            echo "Format de version 4D non reconnu : $version4d"
+            exit 1
+          fi
+          cat <<EOF >>${GITHUB_WORKSPACE}/Build/release/${{ env.REPO_NAME }}.4dbase/Resources/manifest.json
+          {
+            "name": "$package_name",
+            "version": "$target_tag",
+            "release_tag": "$target_tag IS for 4D ${version4d} ($creation_date)",
+            "tag": "$tag_value"
+          }
+          EOF
+          cat <<EOF >>${GITHUB_WORKSPACE}/Build/release/${{ env.REPO_NAME }}.4dbase/Resources/InfoPlist.strings
+          /* Localized versions of Info.plist keys */
+
+          CFBundleName = "$package_name";
+          CFBundleShortVersionString = "$target_tag IS (4D ${version4d})";
+          CFBundleGetInfoString = "${{ vars.APPNAME }} v$target_tag IS for 4D ${version4d} ($creation_date)";
+          EOF
+        shell: bash
+        
+      - name: Setup private key
+        run: echo "${{ secrets.PRIVATE_KEY }}" > private_key.pem
+
+      - name: Decrypt file
+        run: |
+          chmod 600 private_key.pem
+          openssl pkeyutl -decrypt -inkey private_key.pem -in ../../key.enc -out key_decrypted.txt
+          KEYCHAIN_PASSWORD=$(cat key_decrypted.txt)
+          echo "::add-mask::$KEYCHAIN_PASSWORD" # Masque la valeur dans les logs
+          echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD" >> $GITHUB_ENV
+    
+      - name: Setup keychain 
+        id: keychain
+        uses: 4eDimension/Tools/.github/actions/deployment-setup-keychain@main
+        with:
+          APPLE_DEVELOPER_ID_CERTIFICATE: ${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE }}
+          APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ env.KEYCHAIN_PASSWORD }}
+
+      - name: Unlock keychain
+        id: unlock
+        run: security unlock-keychain -p ${{ env.KEYCHAIN_PASSWORD }}
+        shell: bash
+
+      - name: Codesign & notaryze for Mac
+        id: codesign
+        uses: 4eDimension/Tools/.github/actions/deployment-codesign-product@main
+        with: 
+          sign: ${{ secrets.CODESIGN_APPLE_ID }} 
+          apple_id: ${{ secrets.NOTARYTOOL_APPLE_ID }}         
+          team_id: ${{ secrets.NOTARYTOOL_TEAM_ID }}   
+          password: ${{ secrets.NOTARYTOOL_PASSWORD }}
+          product_path: ${{ github.workspace }}/Build/release/${{ env.REPO_NAME }}.4dbase/
+          dmg_path: ${{ github.workspace }}/Build/release/${{ env.REPO_NAME }}.dmg
+          keychain: ${{ steps.keychain.outputs.KEYCHAIN_PATH }}
+
+      - name: Read notarization status
+        id: read_status
+        run: |
+          status=$(cat "${{ github.workspace }}/notarization_status.txt")
+          echo "🛡️ Statut lu : $status"
+          echo "status=$status" >> $GITHUB_OUTPUT
+
+      - name: Final check
+        run: |
+          if [ "${{ steps.read_status.outputs.status }}" != "Accepted" ]; then
+            echo "❌ La notarisation a échoué : statut = ${{ steps.read_status.outputs.status }}"
+            exit 1
+          else
+            echo "✅ Notarisation confirmée avec succès"
+          fi
+
+      - name: Zip artifact
+        id: zip
+        run: |
+          cd ${{ github.workspace }}/Build/release/
+          zip -r ${{ github.workspace }}/Build/release/${{ vars.APPNAME }}.zip ./${{ env.REPO_NAME }}.4dbase/*
+        shell: bash
+
+      - name: Upload FTP
+        id: upload
+        run: |
+          curl --ftp-ssl-reqd --user ${{ secrets.FTP_PRIVATE_LOGIN }}:'${{ secrets.FTP_PRIVATE_PASSWORD }}' --upload-file ${GITHUB_WORKSPACE}/Build/release/${{ vars.APPNAME }}.zip ${{ secrets.FTP_PRIVATE_PATH }}
+        shell: bash
+
+      - name: Cleaning
+        id: cleaning
+        run: |
+          rm ${{ github.workspace }}/Build/release/${{ env.REPO_NAME }}.dmg
+          rm ${{ github.workspace }}/Build/release/${{ vars.APPNAME }}.zip
+          rm -f ${{ github.workspace }}/Build/release/errors
+        shell: bash
+
+      #- name: Upload artifact
+      #  id: artifact
+      #  uses: actions/upload-artifact@v4
+      #  with:
+      #    name: ${{ vars.APPNAME }}
+      #    path: ${{ github.workspace }}/Build/release/
+      #    if-no-files-found: error
+      #    compression-level: 9
